@@ -3,59 +3,92 @@ const path = require('path');
 const { execSync } = require('child_process');
 const axios = require('axios');
 
-const JAVA_DIR = path.join(__dirname, 'java8');
-const JAVA_BIN = path.join(JAVA_DIR, 'bin', 'java');
-const PAPER_URL = 'https://api.papermc.io/v2/projects/paper/versions/1.8.8/builds/445/downloads/paper-1.8.8-445.jar';
-const PORT = 12005;
-const JAR = 'paper.jar';
-const RAM_LIMIT = '528M';
+const MC_VERSION = process.env.version; // ← variable de entorno
+if (!MC_VERSION) {
+  console.error('❌ Debes definir la variable de entorno "version", ej: export version=1.20.6');
+  process.exit(1);
+}
 
-async function installJava8() {
+const JAVA_DIR = path.join(__dirname, 'java');
+const JAVA_BIN = path.join(JAVA_DIR, 'bin', 'java');
+const PAPER_API = 'https://api.papermc.io/v2/projects/paper';
+const JAR = 'paper.jar';
+const PORT = 12005;
+
+// ─────────────────────────────────────────────────────────────
+// 1️⃣ Tabla simple: versión de Minecraft → Java recomendado
+// (basada en la documentación oficial de Paper/Spigot/Mojang)
+// ─────────────────────────────────────────────────────────────
+function javaFor(mc) {
+  const v = mc.split('.').slice(0,2).join('.'); // ej "1.20"
+  const [maj, min] = v.split('.').map(Number);
+  if (maj === 1 && min <= 8)  return { name: '8',  url: 'https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u402-b06/OpenJDK8U-jre_x64_linux_hotspot_8u402b06.tar.gz' };
+  if (maj === 1 && min <= 16) return { name: '11', url: 'https://github.com/adoptium/temurin11-binaries/releases/download/jdk-11.0.24+8/OpenJDK11U-jre_x64_linux_hotspot_11.0.24_8.tar.gz' };
+  if (maj === 1 && min <= 17) return { name: '16', url: 'https://github.com/adoptium/temurin16-binaries/releases/download/jdk-16.0.2+7/OpenJDK16U-jre_x64_linux_hotspot_16.0.2_7.tar.gz' };
+  if (maj === 1 && min <= 18) return { name: '17', url: 'https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.12+7/OpenJDK17U-jre_x64_linux_hotspot_17.0.12_7.tar.gz' };
+  // 1.19+ se recomienda Java 17 o superior
+  return { name: '17', url: 'https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.12+7/OpenJDK17U-jre_x64_linux_hotspot_17.0.12_7.tar.gz' };
+}
+
+// ─────────────────────────────────────────────────────────────
+// 2️⃣ Instalación de Java si no existe
+// ─────────────────────────────────────────────────────────────
+async function installJava() {
   if (fs.existsSync(JAVA_BIN)) {
-    console.log('✅ Java 8 ya está instalado.');
+    console.log(`✅ Java ya está instalado.`);
     return;
   }
-
-  console.log('📦 Descargando Java 8 sin root...');
-  const url = 'https://github.com/adoptium/temurin8-binaries/releases/download/jdk8u402-b06/OpenJDK8U-jre_x64_linux_hotspot_8u402b06.tar.gz';
-
+  const { name, url } = javaFor(MC_VERSION);
+  console.log(`📦 Descargando Java ${name} para Minecraft ${MC_VERSION}...`);
   fs.ensureDirSync(JAVA_DIR);
   execSync(`curl -L ${url} | tar -xz -C ${JAVA_DIR} --strip-components=1`, { stdio: 'inherit' });
-  console.log('✅ Java 8 instalado sin root.');
+  console.log(`✅ Java ${name} instalado sin root.`);
 }
 
-async function installPaper188() {
+// ─────────────────────────────────────────────────────────────
+// 3️⃣ Descargar el último build de Paper para la versión elegida
+// ─────────────────────────────────────────────────────────────
+async function installPaper() {
   if (fs.existsSync(JAR)) {
-    console.log('✅ Paper 1.8.8 ya descargado.');
+    console.log('✅ Paper ya descargado.');
     return;
   }
-
-  console.log('🌐 Descargando Paper 1.8.8 build 445...');
+  console.log(`🌐 Buscando build más reciente para Paper ${MC_VERSION}...`);
+  const { data: builds } = await axios.get(`${PAPER_API}/versions/${MC_VERSION}`);
+  const lastBuild = builds.builds[builds.builds.length - 1];
+  const fileName = `paper-${MC_VERSION}-${lastBuild}.jar`;
+  const downloadUrl = `${PAPER_API}/versions/${MC_VERSION}/builds/${lastBuild}/downloads/${fileName}`;
+  console.log(`📥 Descargando Paper build ${lastBuild}...`);
   const writer = fs.createWriteStream(JAR);
-  const res = await axios.get(PAPER_URL, { responseType: 'stream' });
+  const res = await axios.get(downloadUrl, { responseType: 'stream' });
   res.data.pipe(writer);
   await new Promise(r => writer.on('finish', r));
-  console.log('✅ Paper 1.8.8 (build 445) descargado.');
+  console.log(`✅ Paper ${MC_VERSION} (build ${lastBuild}) descargado.`);
 }
 
+// ─────────────────────────────────────────────────────────────
+// 4️⃣ Archivos básicos
+// ─────────────────────────────────────────────────────────────
 function setupFiles() {
   if (!fs.existsSync('eula.txt')) {
     fs.writeFileSync('eula.txt', 'eula=true\n');
   }
-
   if (!fs.existsSync('server.properties')) {
-    fs.writeFileSync('server.properties', `server-port=${PORT}\nmotd=Servidor 1.8.8\n`);
+    fs.writeFileSync('server.properties', `server-port=${PORT}\nmotd=Servidor ${MC_VERSION}\n`);
   }
-
-  // ❌ Eliminado: creación de start.sh
+  // ❗ No tocamos start.sh ni ejecutamos el servidor
 }
 
+// ─────────────────────────────────────────────────────────────
+// 5️⃣ Proceso principal
+// ─────────────────────────────────────────────────────────────
 (async () => {
   try {
-    await installJava8();
-    await installPaper188();
+    await installJava();
+    await installPaper();
     setupFiles();
-    console.log('✅ Instalación completa. No se ha ejecutado el servidor ni modificado start.sh.');
+    console.log(`🎉 Instalación completa para Minecraft ${MC_VERSION}`);
+    console.log('➡️  Ahora puedes iniciar tu servidor manualmente con tu propio start.sh');
   } catch (err) {
     console.error('❌ Error:', err.message);
   }
