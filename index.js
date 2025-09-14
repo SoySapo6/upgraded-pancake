@@ -100,12 +100,6 @@ function launchServer() {
 
   console.log('🚀 Iniciando servidor Minecraft 1.8.8...\n');
 
-  const mc = spawn('./start.sh', {
-
-  stdio: 'inherit'
-
-});
-
   mc.stdout.on('data', data => process.stdout.write(`🟢 [MC] ${data}`));
 
   mc.stderr.on('data', data => process.stderr.write(`🔴 [MC] ${data}`));
