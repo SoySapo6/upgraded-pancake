@@ -1,0 +1,29 @@
+{
+
+  "name": "minecraft-server-installer",
+
+  "version": "1.0.0",
+
+  "description": "Instalador automático de servidor PaperMC en Node.js",
+
+  "main": "index.js",
+
+  "scripts": {
+
+    "start": "node index.js"
+
+  },
+
+  "dependencies": {
+
+    "axios": "^1.6.0",
+
+    "fs-extra": "^11.1.1"
+
+  },
+
+  "author": "Maycol",
+
+  "license": "MIT"
+
+}
