@@ -13,4 +13,16 @@ else
     JAVA_PATH="java"
 fi
 
-$JAVA_PATH -Xmx256M -Xms128M -XX:+UseSerialGC -XX:+DisableExplicitGC -XX:-UseGCOverheadLimit -jar paper.jar --port "$SERVER_PORT" nogui
+# Detectar JAR de Paper disponible
+if [ -f "paper.jar" ]; then
+    JAR_FILE="paper.jar"
+else
+    JAR_FILE=$(ls paper-*.jar 2>/dev/null | head -n1)
+fi
+
+# Verificar que existe el JAR
+if [ -z "$JAR_FILE" ] || [ ! -f "$JAR_FILE" ]; then
+    exit 1
+fi
+
+$JAVA_PATH -Xmx256M -Xms128M -XX:+UseSerialGC -XX:+DisableExplicitGC -XX:-UseGCOverheadLimit -jar "$JAR_FILE" --port "$SERVER_PORT" nogui
